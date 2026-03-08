@@ -37,6 +37,25 @@ const buildRoomMatchFromQuery = (query = {}) => {
     match.roomType = query.roomType;
   }
 
+  if (query.ownerId) {
+    match.ownerId = query.ownerId;
+  }
+
+  if (query.acPreference === 'AC') {
+    match.isAC = true;
+  } else if (query.acPreference === 'Non-AC') {
+    match.isAC = false;
+  }
+
+  if (query.foodType && query.foodType !== 'Any') {
+    match.$or = [{ foodType: query.foodType }, { foodType: 'Both' }];
+  }
+
+  const maxDistance = parseNumber(query.maxDistanceKm);
+  if (maxDistance !== undefined) {
+    match.distanceToWorkOrCollegeKm = { $lte: maxDistance };
+  }
+
   const facilities = parseArray(query.facilities);
   if (facilities.length) {
     match.facilities = { $all: facilities };

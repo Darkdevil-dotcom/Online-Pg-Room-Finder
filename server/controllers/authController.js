@@ -28,13 +28,18 @@ const issueTokens = async (user, res) => {
 };
 
 const register = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, phone } = req.body;
 
   if (!name || !email || !password) {
     throw new ApiError(400, 'name, email, and password are required');
   }
 
-  const normalizedRole = role === 'owner' ? 'owner' : 'user';
+  const roleMap = {
+    owner: 'owner',
+    tenant: 'tenant',
+    user: 'tenant'
+  };
+  const normalizedRole = roleMap[role] || 'tenant';
   const exists = await User.findOne({ email: email.toLowerCase() });
   if (exists) {
     throw new ApiError(409, 'Email already registered');
@@ -43,6 +48,7 @@ const register = asyncHandler(async (req, res) => {
   const user = await User.create({
     name,
     email: email.toLowerCase(),
+    phone,
     password,
     role: normalizedRole
   });

@@ -23,7 +23,12 @@ const protect = asyncHandler(async (req, res, next) => {
 });
 
 const allowRoles = (...roles) => (req, res, next) => {
-  if (!req.user || !roles.includes(req.user.role)) {
+  const role = req.user?.role;
+  const expanded = new Set(roles);
+  if (roles.includes('tenant')) expanded.add('user');
+  if (roles.includes('user')) expanded.add('tenant');
+
+  if (!role || !expanded.has(role)) {
     return next(new ApiError(403, 'Insufficient permission'));
   }
   next();

@@ -5,6 +5,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { deleteByPublicId } = require('../services/cloudinaryService');
 const { parseArray, parseNumber, buildRoomMatchFromQuery } = require('../utils/queryHelpers');
 const { geocodeAddress, normalizeCoordinates } = require('../services/geocodeService');
+const { toImageHash, detectFraudSignals } = require('../services/fraudService');
 
 const normalizeImageUrl = (img) => {
   if (!img) return null;
@@ -26,6 +27,8 @@ const deleteRoomImagesFromCloudinary = async (images) => {
 const normalizeRoomForResponse = (room) => {
   if (!room) return room;
   const raw = room.toObject ? room.toObject() : room;
+  const parsedDistance = parseNumber(body.distanceToWorkOrCollegeKm);
+
   return {
     ...raw,
     images: normalizeImages(raw.images)
@@ -42,8 +45,7 @@ const toPublicRoom = (room) => {
   return {
     ...normalized,
     address: city || normalized.pincode || 'Location not specified',
-    contactNumber: undefined,
-    ownerId: undefined
+    contactNumber: undefined
   };
 };
 
@@ -60,6 +62,9 @@ const normalizeRoomPayload = async (body, uploadedImages, existingRoom) => {
     location = null;
   }
 
+  const images = uploadedImages?.length ? normalizeImages(uploadedImages) : existingRoom?.images || [];
+  const imageHashes = images.map((img) => toImageHash(img)).filter(Boolean);
+
   return {
     title: body.title,
     price: parseNumber(body.price),
@@ -71,8 +76,16 @@ const normalizeRoomPayload = async (body, uploadedImages, existingRoom) => {
     facilities: parseArray(body.facilities),
     roomType: body.roomType,
     gender: body.gender || 'Any',
+    foodType: body.foodType || existingRoom?.foodType || 'Both',
+    isAC:
+      body.isAC !== undefined
+        ? body.isAC === true || body.isAC === 'true' || body.isAC === '1'
+        : existingRoom?.isAC || false,
+    distanceToWorkOrCollegeKm:
+      parsedDistance !== undefined ? parsedDistance : existingRoom?.distanceToWorkOrCollegeKm || 0,
     contactNumber: body.contactNumber,
-    ...(uploadedImages?.length ? { images: normalizeImages(uploadedImages) } : {})
+    ...(uploadedImages?.length ? { images } : {}),
+    imageHashes
   };
 };
 
@@ -92,8 +105,24 @@ const createRoom = asyncHandler(async (req, res) => {
 
   const room = await Room.create({
     ...payload,
+    flagged: false,
+    flaggedReasons: [],
     ownerId: req.user.id
   });
+
+  const fraudCheck = await detectFraudSignals({
+    roomId: room._id,
+    contactNumber: room.contactNumber,
+    title: room.title,
+    address: room.address,
+    imageHashes: room.imageHashes
+  });
+
+  if (fraudCheck.flagged) {
+    room.flagged = true;
+    room.flaggedReasons = fraudCheck.reasons;
+    await room.save();
+  }
 
   res.status(201).json({
     success: true,
@@ -119,7 +148,21 @@ const updateRoom = asyncHandler(async (req, res) => {
     room.location = payload.location;
   }
 
-  const updatable = ['title', 'price', 'deposit', 'description', 'address', 'pincode', 'facilities', 'roomType', 'gender', 'contactNumber'];
+  const updatable = [
+    'title',
+    'price',
+    'deposit',
+    'description',
+    'address',
+    'pincode',
+    'facilities',
+    'roomType',
+    'gender',
+    'foodType',
+    'isAC',
+    'distanceToWorkOrCollegeKm',
+    'contactNumber'
+  ];
   updatable.forEach((field) => {
     if (payload[field] !== undefined) {
       room[field] = payload[field];
@@ -129,7 +172,18 @@ const updateRoom = asyncHandler(async (req, res) => {
   if (req.uploadedImages?.length) {
     await deleteRoomImagesFromCloudinary(room.images);
     room.images = normalizeImages(req.uploadedImages);
+    room.imageHashes = payload.imageHashes;
   }
+
+  const fraudCheck = await detectFraudSignals({
+    roomId: room._id,
+    contactNumber: room.contactNumber,
+    title: room.title,
+    address: room.address,
+    imageHashes: room.imageHashes
+  });
+  room.flagged = fraudCheck.flagged;
+  room.flaggedReasons = fraudCheck.reasons;
 
   await room.save();
 
