@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { aiApi } from '../api/services';
 
 const SESSION_KEY = 'staynear_session_id';
@@ -27,14 +27,12 @@ const createNewSessionId = () => {
 
 const INTRO_MESSAGE = {
   role: 'assistant',
-  content: 'Hi, I am StayNear AI. Tell me your budget, preferred room type, and facilities, and I will shortlist rooms for you.',
-  suggestedQuestions: ['Under Rs 10,000', 'Single room with AC', 'Near me within 5 km']
+  content: 'Hi, I am StayNear AI. Tell me your budget, preferred room type, facilities, and where you want to stay. I will shortlist the best rooms for you.'
 };
 
 const normalizeText = (text) => String(text || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 export default function FloatingChatbot() {
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([INTRO_MESSAGE]);
   const [input, setInput] = useState('');
@@ -57,8 +55,7 @@ export default function FloatingChatbot() {
           ...prev,
           {
             role: 'assistant',
-            content: 'Unable to service that request right now. Please try with different preferences.',
-            suggestedQuestions: ['Change budget', 'Any room type', 'Any facilities']
+            content: 'Unable to service that request right now. Please try with different preferences.'
           }
         ];
       }
@@ -72,7 +69,8 @@ export default function FloatingChatbot() {
 
     setInput('');
     const userMsg = { role: 'user', content: trimmed };
-    setMessages((m) => [...m, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setLoading(true);
 
     let lat = null;
@@ -89,7 +87,11 @@ export default function FloatingChatbot() {
     }
 
     try {
-      const { data } = await aiApi.chat({ sessionId, message: trimmed, lat, lng });
+      const history = nextMessages
+        .slice(-12)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const { data } = await aiApi.chat({ sessionId, message: trimmed, lat, lng, history });
       const payload = data?.data || {};
 
       if (payload.type === 'recommendations' && Array.isArray(payload.recommendations) && payload.recommendations.length > 0) {
@@ -101,8 +103,7 @@ export default function FloatingChatbot() {
       } else if (payload.type === 'follow_up') {
         appendAssistantMessage({
           role: 'assistant',
-          content: payload.text || 'Unable to service this request right now.',
-          suggestedQuestions: payload.suggestedQuestions || []
+          content: payload.text || 'Unable to service this request right now.'
         });
       } else {
         appendAssistantMessage({
@@ -117,14 +118,6 @@ export default function FloatingChatbot() {
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleCompareThese = (recommendations) => {
-    const ids = (recommendations || []).map((r) => r.roomId).filter(Boolean);
-    if (ids.length) {
-      setOpen(false);
-      navigate(`/compare?ids=${ids.join(',')}`);
     }
   };
 
@@ -190,20 +183,6 @@ export default function FloatingChatbot() {
                     <div className="rounded-lg rounded-tl-none px-3 py-2 shadow-md bg-white dark:bg-gray-700 text-airbnb-black dark:text-gray-100 text-sm whitespace-pre-wrap">
                       {msg.content}
                     </div>
-                    {msg.suggestedQuestions && msg.suggestedQuestions.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {msg.suggestedQuestions.map((q, j) => (
-                          <button
-                            key={j}
-                            type="button"
-                            onClick={() => sendUserMessage(q)}
-                            className="text-xs px-2.5 py-1.5 rounded-full bg-white dark:bg-gray-700 border border-[#075E54]/30 text-[#075E54] dark:text-green-300 hover:bg-[#075E54] hover:text-white transition-colors"
-                          >
-                            {q}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                     {msg.recommendations && msg.recommendations.length > 0 && (
                       <div className="mt-2 space-y-2">
                         {msg.recommendations.map((rec, j) => (
@@ -219,6 +198,14 @@ export default function FloatingChatbot() {
                               <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-airbnb-black dark:text-gray-100 text-sm truncate">{rec.title}</p>
                                 <p className="text-xs text-airbnb-pink font-medium">Rs {Number(rec.price || 0).toLocaleString()}/mo</p>
+                                {rec.city && <p className="text-xs text-airbnb-gray dark:text-gray-300">{rec.city}</p>}
+                                {rec.roomType && (
+                                  <p className="text-xs text-airbnb-gray dark:text-gray-300">
+                                    {rec.roomType}{rec.gender && rec.gender !== 'Any' ? ` • ${rec.gender}` : ''}
+                                  </p>
+                                )}
+                                {rec.address && <p className="text-xs text-airbnb-gray dark:text-gray-300 truncate">{rec.address}</p>}
+                                {rec.contactNumber && <p className="text-xs text-airbnb-gray dark:text-gray-300">Contact: {rec.contactNumber}</p>}
                                 {rec.distanceKm != null && <p className="text-xs text-airbnb-gray dark:text-gray-300">{rec.distanceKm} km away</p>}
                               </div>
                             </div>
@@ -229,13 +216,6 @@ export default function FloatingChatbot() {
                             </div>
                           </div>
                         ))}
-                        <button
-                          type="button"
-                          onClick={() => handleCompareThese(msg.recommendations)}
-                          className="w-full rounded-lg py-2 text-xs font-medium bg-[#075E54] text-white hover:bg-[#054d44] transition-colors duration-300"
-                        >
-                          Compare these
-                        </button>
                       </div>
                     )}
                   </div>

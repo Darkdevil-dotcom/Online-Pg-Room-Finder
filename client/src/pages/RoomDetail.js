@@ -6,9 +6,6 @@ import { addCompareId, getCompareIds, isInCompare, removeCompareId } from '../ut
 import StarRating from '../components/reviews/StarRating';
 import ReviewList from '../components/reviews/ReviewList';
 
-const fallbackImage = 'https://via.placeholder.com/800x600?text=No+image';
-const toImageUrl = (img) => (typeof img === 'string' ? img : img?.url);
-
 export default function RoomDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -17,7 +14,7 @@ export default function RoomDetail() {
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [compareIds, setCompareIds] = useState(getCompareIds());
-  const [selectedImage, setSelectedImage] = useState(0);
+
   const [reviews, setReviews] = useState([]);
   const [myRating, setMyRating] = useState(5);
   const [myReview, setMyReview] = useState('');
@@ -89,14 +86,7 @@ export default function RoomDetail() {
 
   const alreadyInCompare = useMemo(() => (room?._id ? isInCompare(room._id) : false), [room?._id]);
   const canAddToCompare = compareIds.length < 3 || alreadyInCompare;
-  const imageUrls = useMemo(() => {
-    const urls = (room?.images || []).map(toImageUrl).filter(Boolean);
-    return urls.length ? urls : [fallbackImage];
-  }, [room?.images]);
 
-  useEffect(() => {
-    setSelectedImage(0);
-  }, [room?._id]);
 
   const toggleFavorite = () => {
     if (!isAuthenticated || !room?._id) return;
@@ -177,6 +167,8 @@ export default function RoomDetail() {
     );
   }
 
+  console.log(room.images);
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 text-airbnb-black dark:text-gray-100 transition-colors duration-300">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
@@ -211,22 +203,8 @@ export default function RoomDetail() {
 
       <div className="rounded-airbnb overflow-hidden bg-white dark:bg-gray-800 shadow-card mb-6 transition-colors duration-300">
         <div className="aspect-room relative">
-          <img src={imageUrls[selectedImage] || fallbackImage} alt={room.title} className="w-full h-full object-cover" />
+          <img src={room.images?.[0] || "/placeholder.jpg"} alt={room.title} className="w-full h-full object-cover" />
         </div>
-        {imageUrls.length > 1 && (
-          <div className="flex gap-2 p-2 overflow-x-auto">
-            {imageUrls.map((url, i) => (
-              <button
-                key={`${url}-${i}`}
-                type="button"
-                onClick={() => setSelectedImage(i)}
-                className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border transition-colors duration-300 ${selectedImage === i ? 'border-airbnb-pink' : 'border-airbnb-gray-light dark:border-gray-700'}`}
-              >
-                <img src={url} alt="" className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -264,7 +242,7 @@ export default function RoomDetail() {
                   value={myReview}
                   onChange={(e) => setMyReview(e.target.value)}
                   rows={3}
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                   placeholder="Share your experience"
                 />
                 {reviewError && <p className="text-sm text-red-600">{reviewError}</p>}
@@ -296,7 +274,7 @@ export default function RoomDetail() {
                     rows={3}
                     value={inquiryMessage}
                     onChange={(e) => setInquiryMessage(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                     placeholder="Send inquiry to owner"
                   />
                   <button type="button" onClick={submitInquiry} className="w-full rounded-full bg-airbnb-pink text-white py-2 text-sm">

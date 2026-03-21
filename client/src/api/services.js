@@ -10,6 +10,7 @@ export const authApi = {
 
 export const roomsApi = {
   list: (params) => api.get('/rooms', { params }),
+  myRooms: () => api.get('/rooms/user'),
   getById: (id) => api.get(`/rooms/${id}`),
   getFullById: (id) => api.get(`/rooms/${id}/full`),
   nearby: (params) => api.get('/rooms/nearby', { params }),
@@ -54,4 +55,10 @@ export const analyticsApi = {
 export const notificationApi = {
   list: () => api.get('/notifications'),
   markRead: (id) => api.patch(`/notifications/${id}/read`),
+};
+
+export const roommatesApi = {
+  getMyProfile: () => api.get('/roommates/me'),
+  upsertMyProfile: (body) => api.put('/roommates/me', body),
+  findMatches: () => api.get('/roommates/matches')
 };

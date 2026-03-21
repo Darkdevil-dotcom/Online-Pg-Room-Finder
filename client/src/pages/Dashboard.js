@@ -15,11 +15,8 @@ export default function Dashboard() {
       return;
     }
     if (!isOwner) return;
-    roomsApi.list({ limit: 50 })
-      .then(({ data }) => {
-        const list = data.data || [];
-        setRooms(list.filter((r) => r.ownerId?._id === user?.id || r.ownerId === user?.id));
-      })
+    roomsApi.myRooms()
+      .then(({ data }) => setRooms(data.data || []))
       .catch(() => setRooms([]))
       .finally(() => setLoading(false));
   }, [authLoading, isOwner, user?.id, navigate]);

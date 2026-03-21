@@ -1,4 +1,4 @@
-﻿const notFound = (req, res, next) => {
+const notFound = (req, res, next) => {
   res.status(404).json({
     success: false,
     message: `Route not found: ${req.originalUrl}`
@@ -7,6 +7,9 @@
 
 const errorHandler = (err, req, res, next) => {
   const statusCode = err.statusCode || 500;
+
+  // Centralized logging for easier debugging during development.
+  console.error('[StayNear Error]', err?.message || err);
 
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({ success: false, message: 'Invalid token' });

@@ -15,6 +15,8 @@ import Register from './pages/Register';
 import Favorites from './pages/Favorites';
 import RecommendationsPage from './pages/RecommendationsPage';
 import OwnerAnalyticsPage from './pages/OwnerAnalyticsPage';
+import RoommateProfile from './pages/RoommateProfile';
+import RoommatesMatches from './pages/RoommatesMatches';
 
 function App() {
   return (
@@ -37,6 +39,8 @@ function App() {
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/recommendations" element={<RecommendationsPage />} />
               <Route path="/analytics" element={<OwnerAnalyticsPage />} />
+              <Route path="/roommate-profile" element={<RoommateProfile />} />
+              <Route path="/roommates" element={<RoommatesMatches />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

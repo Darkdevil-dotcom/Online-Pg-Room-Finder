@@ -9,6 +9,7 @@ export default function RoomForm() {
   const { isOwner, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [loadRoom, setLoadRoom] = useState(isEdit);
   const [form, setForm] = useState({
     title: '',
@@ -63,8 +64,9 @@ export default function RoomForm() {
     setForm((f) => ({ ...f, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError('');
     setLoading(true);
     const payload = {
       ...form,
@@ -83,11 +85,19 @@ export default function RoomForm() {
       formData.append('images', imageFile);
     }
 
-    const promise = isEdit ? roomsApi.update(id, formData) : roomsApi.create(formData);
-    promise
-      .then(() => navigate('/dashboard'))
-      .catch(() => setLoading(false))
-      .finally(() => setLoading(false));
+    try {
+      if (isEdit) await roomsApi.update(id, formData);
+      else await roomsApi.create(formData);
+      navigate('/dashboard');
+    } catch (err) {
+      const apiMessage = err?.response?.data?.message;
+      const message = apiMessage || 'Failed to save listing. Please check your login and form values.';
+      setSubmitError(message);
+      alert(message);
+      console.error('[RoomForm] submit failed:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (authLoading || (isEdit && loadRoom)) {
@@ -111,6 +121,11 @@ export default function RoomForm() {
     <div className="max-w-3xl mx-auto px-4 py-8 bg-white dark:bg-gray-900 text-airbnb-black dark:text-gray-100 min-h-screen transition-colors duration-300">
       <h1 className="text-2xl font-bold mb-6">{isEdit ? 'Edit listing' : 'New listing'}</h1>
       <form onSubmit={handleSubmit} className="rounded-airbnb bg-white dark:bg-gray-800 shadow-card p-6 space-y-4 transition-colors duration-300">
+        {submitError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium mb-1">Title *</label>
           <input name="title" value={form.title} onChange={handleChange} required className={fieldClass} />

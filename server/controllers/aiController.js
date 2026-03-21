@@ -4,6 +4,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { parseArray, parseNumber } = require('../utils/queryHelpers');
 const { recommendRoomsWithAI } = require('../services/aiService');
 const { processChatMessage: processOllamaChat } = require('../services/ollamaChatService');
+const jwt = require('jsonwebtoken');
 
 const buildMatchFromPreferences = (preferences) => {
   const match = {};
@@ -118,6 +119,20 @@ const chat = asyncHandler(async (req, res) => {
   const message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
   const lat = parseNumber(req.body.lat);
   const lng = parseNumber(req.body.lng);
+  const history = Array.isArray(req.body.history) ? req.body.history : [];
+
+  // Optional auth: chatbot must work without login.
+  let isAuthenticated = false;
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+    if (token) {
+      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+      isAuthenticated = Boolean(payload?.sub);
+    }
+  } catch (_err) {
+    isAuthenticated = false;
+  }
 
   if (!message) {
     return res.status(400).json({
@@ -126,7 +141,13 @@ const chat = asyncHandler(async (req, res) => {
     });
   }
 
-  const result = await processOllamaChat(sessionId, message, lat, lng);
+  let result;
+  try {
+    result = await processOllamaChat(sessionId, message, lat, lng, { history, isAuthenticated });
+  } catch (error) {
+    console.error('[aiController.chat] failed:', error?.message || error);
+    return res.status(500).json({ success: false, message: 'AI chat failed' });
+  }
 
   if (result.type === 'recommendations') {
     return res.json({
@@ -144,7 +165,6 @@ const chat = asyncHandler(async (req, res) => {
     data: {
       type: 'follow_up',
       text: result.text,
-      suggestedQuestions: result.suggestedQuestions || []
     }
   });
 });

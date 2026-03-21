@@ -19,6 +19,7 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const inquiryRoutes = require('./routes/inquiryRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const roommateRoutes = require('./routes/roommateRoutes');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -57,6 +58,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/roommates', roommateRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 export default function RoomCard({ room }) {
   const firstImage = room.images?.[0];
   const img = typeof firstImage === 'string' ? firstImage : firstImage?.url;
-  const fallbackImage = 'https://via.placeholder.com/800x600?text=No+image';
+  const fallbackImage = '/placeholder.jpg';
 
   return (
     <Link to={`/rooms/${room._id}`} className="group block">

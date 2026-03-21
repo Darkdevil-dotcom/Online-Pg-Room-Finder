@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 const Room = require('../models/Room');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
@@ -27,11 +27,12 @@ const deleteRoomImagesFromCloudinary = async (images) => {
 const normalizeRoomForResponse = (room) => {
   if (!room) return room;
   const raw = room.toObject ? room.toObject() : room;
-  const parsedDistance = parseNumber(body.distanceToWorkOrCollegeKm);
 
   return {
     ...raw,
-    images: normalizeImages(raw.images)
+    images: normalizeImages(raw.images),
+    distanceToWorkOrCollegeKm:
+      raw.distanceToWorkOrCollegeKm !== undefined ? parseNumber(raw.distanceToWorkOrCollegeKm) ?? raw.distanceToWorkOrCollegeKm : raw.distanceToWorkOrCollegeKm
   };
 };
 
@@ -52,6 +53,7 @@ const toPublicRoom = (room) => {
 const normalizeRoomPayload = async (body, uploadedImages, existingRoom) => {
   const address = typeof body.address === 'string' ? body.address.trim() : existingRoom?.address;
   const pincode = typeof body.pincode === 'string' ? body.pincode.trim() : existingRoom?.pincode;
+  const parsedDistance = parseNumber(body.distanceToWorkOrCollegeKm);
   let location;
 
   if (address && pincode) {
@@ -90,6 +92,15 @@ const normalizeRoomPayload = async (body, uploadedImages, existingRoom) => {
 };
 
 const createRoom = asyncHandler(async (req, res) => {
+  if (!req.user) {
+    throw new ApiError(401, 'Not authorized');
+  }
+
+  console.log('[createRoom] payload received:', {
+    ...req.body,
+    hasImages: Boolean(req.uploadedImages?.length)
+  });
+
   const payload = await normalizeRoomPayload(req.body, req.uploadedImages);
 
   const required = ['title', 'price', 'address', 'pincode', 'roomType', 'contactNumber'];
@@ -236,7 +247,7 @@ const getRoomById = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: normalizeRoomForResponse(room)
+    data: room
   });
 });
 
@@ -407,6 +418,17 @@ const compareRooms = asyncHandler(async (req, res) => {
   res.json({ success: true, data: rooms.map(toPublicRoom) });
 });
 
+const getRoomsForUser = asyncHandler(async (req, res) => {
+  const rooms = await Room.find({ ownerId: req.user.id })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  res.json({
+    success: true,
+    data: rooms.map(toPublicRoom)
+  });
+});
+
 module.exports = {
   createRoom,
   updateRoom,
@@ -415,5 +437,6 @@ module.exports = {
   getRoomById,
   listRooms,
   getNearbyRooms,
-  compareRooms
+  compareRooms,
+  getRoomsForUser
 };

@@ -12,14 +12,19 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
-  const [accessToken, setAccessToken] = useState(() => localStorage.getItem('accessToken'));
+  const [accessToken, setAccessToken] = useState(() => localStorage.getItem('accessToken') || localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   const persistUser = useCallback((userData, token) => {
     if (userData) localStorage.setItem('user', JSON.stringify(userData));
     else localStorage.removeItem('user');
-    if (token) localStorage.setItem('accessToken', token);
-    else localStorage.removeItem('accessToken');
+    if (token) {
+      localStorage.setItem('accessToken', token);
+      localStorage.setItem('token', token);
+    } else {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('token');
+    }
     setUser(userData);
     setAccessToken(token);
   }, []);

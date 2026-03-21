@@ -1,4 +1,4 @@
-﻿/**
+/**
  * StayNear conversational recommendation assistant (Ollama / local LLM).
  * No paid APIs. Uses aiService.generate() -> http://localhost:11434/api/generate (phi3).
  */
@@ -16,6 +16,27 @@ const getImageUrl = (img) => {
   if (typeof img === 'object' && typeof img.url === 'string') return img.url;
   return null;
 };
+
+function extractIntentFromMessage(message = '') {
+  const t = String(message || '').toLowerCase();
+  if (/\b(near me|current location|my location|walking|commute)\b/.test(t)) return 'nearby';
+  if (/\b(\bbudget\b|rs|under|max|upto|below|cost)\b/.test(t) || /\d{3,6}/.test(t)) return 'budget';
+  if (/\b(single|double|triple|1\s*bhk|2\s*bhk|3\s*bhk|room type|bhk)\b/.test(t)) return 'roomType';
+  if (/\b(ac|air\s*condition|food|veg|non-veg|tiffin|mess)\b/.test(t)) return 'facilities';
+  return 'general';
+}
+
+function formatHistoryForPrompt(history = []) {
+  if (!Array.isArray(history) || !history.length) return '';
+  const tail = history.slice(-8);
+  return tail
+    .map((m) => {
+      const role = m?.role === 'user' ? 'User' : 'Assistant';
+      const content = (m?.content || '').toString().trim();
+      return `${role}: ${content}`;
+    })
+    .join('\n');
+}
 
 function getOrCreateSession(sessionId) {
   if (!sessionId) return null;
@@ -58,34 +79,19 @@ function extractPreferencesFromMessage(message, currentPrefs = {}) {
 
 function getNextMissingQuestion(preferences) {
   if (preferences.budget == null) {
-    return {
-      text: "Hi! I'm StayNear AI, your student housing advisor. What's your maximum budget per month (in Rs)?",
-      suggestedQuestions: ['Under Rs 10,000', 'Under Rs 15,000', 'Under Rs 20,000']
-    };
+    return { text: "What's your maximum budget per month (in Rs)?" };
   }
   if (preferences.gender == null) {
-    return {
-      text: 'Got it. Preferred gender for the PG?',
-      suggestedQuestions: ['Male', 'Female', 'Any']
-    };
+    return { text: 'Any preferred gender for the PG (Male/Female/Any)?' };
   }
   if (preferences.roomType == null) {
-    return {
-      text: 'What type of room do you prefer?',
-      suggestedQuestions: ['Single', 'Double', 'Triple']
-    };
+    return { text: 'What room type do you prefer (Single/Double/Triple)?' };
   }
   if (preferences.food == null && preferences.ac == null) {
-    return {
-      text: 'Any must-have facilities? (e.g. food included, AC)',
-      suggestedQuestions: ['Food included', 'AC', 'Both', 'None']
-    };
+    return { text: 'Do you want food, AC, both, or none?' };
   }
   if (preferences.distance == null && preferences.lat == null) {
-    return {
-      text: 'How far are you okay with? Share "near me" for current location, or a max distance in km.',
-      suggestedQuestions: ['Within 5 km', 'Within 10 km', 'Near me']
-    };
+    return { text: 'How far are you okay with? Reply with a max distance in km, or tell me "near me".' };
   }
   return null;
 }
@@ -151,23 +157,36 @@ const SYSTEM_PERSONALITY = `You are StayNear AI, a friendly student housing advi
 You only recommend from the given rooms. Never invent rooms.
 Prefer cheaper, closer, and matching facilities. Explain reasoning clearly in simple English.`;
 
-function buildOllamaPrompt(preferences, roomsFormatted) {
+function buildOllamaPrompt({ userMessage, intent, preferences, roomsFormatted, historyText }) {
   const prefsText = JSON.stringify(preferences, null, 2);
-  return `${SYSTEM_PERSONALITY}
+  return `You are StayNear AI, a smart PG/room advisor.
+You must recommend rooms only from given data.
+Do not invent rooms.
+Ask follow-up questions if needed.
+Be conversational and helpful.
 
-User Preferences:
+User Message:
+${userMessage}
+
+Extracted Intent:
+${intent}
+
+Extracted Preferences (structured JSON):
 ${prefsText}
+
+Conversation History:
+${historyText || '(none)'}
 
 Available Rooms:
 ${roomsFormatted}
 
 Tasks:
-1. Recommend best overall room from the list.
-2. Recommend cheapest suitable room from the list.
-3. Recommend closest room from the list.
-4. Explain each in a friendly tone under 120 words total.
-5. If no perfect match, explain the compromise.
+1. Understand user needs.
+2. Recommend best 3 rooms from the list only.
+3. Explain why (brief, friendly).
+4. Ask follow-up questions if missing info that would improve recommendations.
 
+Output requirements:
 At the end of your response, on a new line write exactly:
 ROOM_IDS: <id1>,<id2>,<id3>
 Use the exact room IDs from the Available Rooms list (comma-separated, no spaces).`;
@@ -187,13 +206,13 @@ function parseRoomIdsFromResponse(responseText) {
     .slice(0, 3);
 }
 
-async function processChatMessage(sessionId, userMessage, lat, lng) {
+async function processChatMessage(sessionId, userMessage, lat, lng, context = {}) {
   const session = getOrCreateSession(sessionId);
+  const { history = [], isAuthenticated = false } = context || {};
   if (!session) {
     return {
       type: 'follow_up',
-      text: 'Please refresh and try again. (Session missing.)',
-      suggestedQuestions: ['Under Rs 15,000', 'Single room']
+      text: 'Please refresh and try again. (Session missing.)'
     };
   }
 
@@ -203,13 +222,13 @@ async function processChatMessage(sessionId, userMessage, lat, lng) {
     session.preferences.lng = lng;
   }
 
+  const intent = extractIntentFromMessage(userMessage);
   const nextQuestion = getNextMissingQuestion(session.preferences);
   if (nextQuestion) {
     session.lastAssistantText = nextQuestion.text;
     return {
       type: 'follow_up',
-      text: nextQuestion.text,
-      suggestedQuestions: nextQuestion.suggestedQuestions || []
+      text: nextQuestion.text
     };
   }
 
@@ -218,13 +237,19 @@ async function processChatMessage(sessionId, userMessage, lat, lng) {
     session.lastAssistantText = "I couldn't find matching rooms right now. Please change your budget or filters and try again.";
     return {
       type: 'follow_up',
-      text: session.lastAssistantText,
-      suggestedQuestions: ['Increase budget', 'Any gender', 'Any room type']
+      text: session.lastAssistantText
     };
   }
 
   const roomsFormatted = formatRoomsForPrompt(rooms);
-  const prompt = buildOllamaPrompt(session.preferences, roomsFormatted);
+  const historyText = formatHistoryForPrompt(history);
+  const prompt = buildOllamaPrompt({
+    userMessage,
+    intent,
+    preferences: session.preferences,
+    roomsFormatted,
+    historyText
+  });
 
   let message;
   try {
@@ -253,8 +278,7 @@ async function processChatMessage(sessionId, userMessage, lat, lng) {
     session.lastAssistantText = 'Unable to service this request right now. Please try with updated preferences.';
     return {
       type: 'follow_up',
-      text: session.lastAssistantText,
-      suggestedQuestions: ['Change budget', 'Any room type', 'Any facilities']
+      text: session.lastAssistantText
     };
   }
 
@@ -267,11 +291,12 @@ async function processChatMessage(sessionId, userMessage, lat, lng) {
       roomId: r._id.toString(),
       title: r.title,
       price: r.price,
-      address: r.address,
+      city: typeof r.address === 'string' ? r.address.split(',').pop().trim() : (r.pincode || 'Location not specified'),
       distanceKm: r.distanceKm,
       image: getImageUrl(r.images?.[0]),
       roomType: r.roomType,
-      gender: r.gender
+      gender: r.gender,
+      ...(isAuthenticated ? { address: r.address, contactNumber: r.contactNumber } : {})
     }))
   };
 }

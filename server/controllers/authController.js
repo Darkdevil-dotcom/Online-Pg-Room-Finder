@@ -1,4 +1,4 @@
-﻿const User = require('../models/User');
+const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const {
@@ -110,12 +110,13 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 
   const incomingHash = hashToken(token);
-  const tokenExists = user.refreshTokens.includes(incomingHash);
+  const tokenExists = user.refreshTokens && user.refreshTokens.includes(incomingHash);
 
   if (!tokenExists) {
     throw new ApiError(401, 'Refresh token not recognized');
   }
 
+  if (!user.refreshTokens) user.refreshTokens = [];
   user.refreshTokens = user.refreshTokens.filter((tokenHash) => tokenHash !== incomingHash);
 
   const newAccessToken = generateAccessToken(user);

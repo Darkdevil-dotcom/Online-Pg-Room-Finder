@@ -1,24 +1,34 @@
-const THEME_KEY = 'theme';
+/** Current theme: 'dark' | 'light' (from DOM + localStorage fallback). */
+export const getTheme = () => {
+  if (typeof document === 'undefined') return 'light';
+  if (document.documentElement.classList.contains('dark')) return 'dark';
+  const saved = localStorage.getItem('theme');
+  return saved === 'dark' ? 'dark' : 'light';
+};
 
-export function getTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
+export const loadTheme = () => {
+  const saved = localStorage.getItem('theme');
 
-export function applyTheme(theme) {
-  const isDark = theme === 'dark';
-  document.documentElement.classList.toggle('dark', isDark);
-  localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
-  window.dispatchEvent(new CustomEvent('theme-change', { detail: isDark ? 'dark' : 'light' }));
-  return isDark ? 'dark' : 'light';
-}
+  if (saved === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+};
 
-export function loadTheme() {
-  return applyTheme(getTheme());
-}
+/** Toggle theme, persist, notify listeners. Returns 'dark' | 'light'. */
+export const toggleTheme = () => {
+  const isDark = document.documentElement.classList.contains('dark');
+  const next = isDark ? 'light' : 'dark';
 
-export function toggleTheme() {
-  const next = getTheme() === 'dark' ? 'light' : 'dark';
-  return applyTheme(next);
-}
+  if (isDark) {
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('theme', 'light');
+  } else {
+    document.documentElement.classList.add('dark');
+    localStorage.setItem('theme', 'dark');
+  }
+
+  window.dispatchEvent(new CustomEvent('theme-change', { detail: next }));
+  return next;
+};
